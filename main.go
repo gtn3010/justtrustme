@@ -46,7 +46,7 @@ func NewOIDCDiscovery(iss string) OIDCDiscovery {
 	if err != nil {
 		log.Fatalf("error joining url: %w", err)
 	}
-	ju, err := url.JoinPath(iss, "keys")
+	ju, err := url.JoinPath(iss, "jwks")
 	if err != nil {
 		log.Fatalf("error joining url: %w", err)
 	}
@@ -72,11 +72,13 @@ func NewOIDCDiscovery(iss string) OIDCDiscovery {
 // 	Token string `json:"token"`
 // }
 
-func issuer(r *http.Request) string {
-	return fmt.Sprintf("https://%s", r.Host)
+// func issuer(r *http.Request) string {
+func issuer(r *http.Request, path string) string {
+	return fmt.Sprintf("https://%s%s", r.Host, path)
 }
 
 func main() {
+	contextPath := os.Getenv("URL_CONTEXT_PATH")
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -121,11 +123,11 @@ func main() {
 		<br>
 		<a href="%s">%s</a>
 		`,
-			issuer(r)+"/token", issuer(r)+"/token",
-			issuer(r)+"/token?debug=true", issuer(r)+"/token?debug=true",
-			issuer(r)+"/token?aud=sts.amazonaws.com&likes_dogs=true", issuer(r)+"/token?aud=sts.amazonaws.com&likes_dogs=true",
-			issuer(r)+"/keys", issuer(r)+"/keys",
-			issuer(r)+"/.well-known/openid-configuration", issuer(r)+"/.well-known/openid-configuration",
+			issuer(r, contextPath)+"/token", issuer(r, contextPath)+"/token",
+			issuer(r, contextPath)+"/token?debug=true", issuer(r, contextPath)+"/token?debug=true",
+			issuer(r, contextPath)+"/token?aud=sts.amazonaws.com&likes_dogs=true", issuer(r, contextPath)+"/token?aud=sts.amazonaws.com&likes_dogs=true",
+			issuer(r, contextPath)+"/jwks", issuer(r, contextPath)+"/jwks",
+			issuer(r, contextPath)+"/.well-known/openid-configuration", issuer(r, contextPath)+"/.well-known/openid-configuration",
 			"https://github.com/chainguard-dev/justtrustme", "https://github.com/chainguard-dev/justtrustme",
 		)
 	})
@@ -167,7 +169,7 @@ func main() {
 		}
 		now := time.Now()
 		tok, err := jwt.Signed(signer).Claims(jwt.Claims{
-			Issuer:   issuer(r),
+			Issuer:   issuer(r, contextPath),
 			IssuedAt: jwt.NewNumericDate(now),
 			Expiry:   jwt.NewNumericDate(now.Add(30 * time.Minute)),
 		}).Claims(claims).CompactSerialize()
@@ -231,14 +233,16 @@ func main() {
 		// }
 	})
 
-	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewEncoder(w).Encode(NewOIDCDiscovery(issuer(r))); err != nil {
+	wellknownPath := fmt.Sprintf("%s/.well-known/openid-configuration", contextPath)
+	mux.HandleFunc(wellknownPath, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewEncoder(w).Encode(NewOIDCDiscovery(issuer(r, contextPath))); err != nil {
 			log.Errorf("error encoding response: %w", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
-	mux.HandleFunc("/keys", func(w http.ResponseWriter, r *http.Request) {
+	publicKeyPath := fmt.Sprintf("%s/jwks", contextPath)
+	mux.HandleFunc(publicKeyPath, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(jose.JSONWebKeySet{
 			Keys: []jose.JSONWebKey{
 				jwk.Public(),

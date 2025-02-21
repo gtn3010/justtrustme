@@ -68,9 +68,9 @@ func NewOIDCDiscovery(iss string) OIDCDiscovery {
 	}
 }
 
-type TokenResponse struct {
-	Token string `json:"token"`
-}
+// type TokenResponse struct {
+// 	Token string `json:"token"`
+// }
 
 func issuer(r *http.Request) string {
 	return fmt.Sprintf("https://%s", r.Host)
@@ -224,10 +224,11 @@ func main() {
 			}
 			fmt.Fprintln(w, buf)
 		}
-		if err := json.NewEncoder(w).Encode(TokenResponse{tok}); err != nil {
-			log.Errorf("error encoding response: %w", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		w.Write([]byte(tok))
+		// if err := json.NewEncoder(w).Encode(TokenResponse{tok}); err != nil {
+		// 	log.Errorf("error encoding response: %w", err)
+		// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+		// }
 	})
 
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
